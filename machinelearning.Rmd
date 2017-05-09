@@ -1,0 +1,108 @@
+---
+title: "Practical Machine Learning"
+output: html_document
+---
+#Background
+
+Using devices such as JawboneUp, NikeFuelBand, and Fitbitit is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+The goal of this project is to use the data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and predict where the data came from.
+
+#Get Data
+
+The training data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+```{r}
+library(caret)
+url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+target <- "pml_training.csv"
+download.file(url, destfile = target)
+trainRaw <- read.csv(target)
+url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+target <- "pml_testing.csv"
+download.file(url, destfile = target)
+testRaw <- read.csv(target)
+```
+
+#Clean Data
+
+We need to split the data up in order to have a pure data set and a validation data set.
+Use only relevent columns with nonzero colums
+
+
+```{r}
+trainRaw <- trainRaw[, colSums(is.na(trainRaw)) == 0] 
+testRaw <- testRaw[, colSums(is.na(testRaw)) == 0] 
+classe <- trainRaw$classe
+trainRemove <- grepl("^X|timestamp|window", names(trainRaw))
+trainRaw <- trainRaw[, !trainRemove]
+trainCleaned <- trainRaw[, sapply(trainRaw, is.numeric)]
+trainCleaned$classe <- classe
+testRemove <- grepl("^X|timestamp|window", names(testRaw))
+testRaw <- testRaw[, !testRemove]
+testCleaned <- testRaw[, sapply(testRaw, is.numeric)]
+```
+
+```{r}
+set.seed(22519) # For reproducibile purpose
+inTrain <- createDataPartition(trainCleaned$classe, p=0.70, list=F)
+trainData <- trainCleaned[inTrain, ]
+testData <- trainCleaned[-inTrain, ]
+
+```
+
+#Data Manipulation
+First lets visualize correlation
+
+```{r}
+library(corrplot)
+corrPlot <- cor(trainData[, -length(names(trainData))])
+corrplot(corrPlot, method="color")
+```
+
+Our first model will be done using a random forest. Beware this takes a couple of minutes to run... 
+
+```{r}
+controlRf <- trainControl(method="cv", 5)
+modelRf <- train(classe ~ ., data=trainData, method="rf", trControl=controlRf, ntree=250)
+modelRf
+```
+
+#Model Results
+
+```{r}
+predict <- predict(modelRf, testData)
+confusionMatrix(testData$classe, predict)
+```
+
+
+```{r}
+accuracy <- postResample(predict, testData$classe)
+accuracy
+o <- 1 - as.numeric(confusionMatrix(testData$classe, predict)$overall[1])
+o
+```
+
+Now, with the above information we can predict...
+
+```{r}
+result <- predict(modelRf, testCleaned[, -length(names(testCleaned))])
+result
+```
+#Decision Tree
+
+```{r}
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+treeModel <- rpart(classe ~ ., data=trainData, method="class")
+prp(treeModel) # fast plot
+```
+
+#Conclusion
+
+The Random Forest model has an accuracy of about 99 percent. 
